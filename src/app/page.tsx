@@ -1,0 +1,1 @@
+export default function Home() { return <main style={{ fontFamily: "system-ui", maxWidth: 640, margin: "10vh auto", padding: 24 }}><h1>SlothSignal</h1><p>Serviço de notificações Web Push da DULLSHIFT.</p><p>Dispositivos são registrados pelos aplicativos integrados.</p></main>; }

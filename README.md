@@ -1,69 +1,43 @@
 # SlothSignal
 
-Serviço de notificações reutilizável para os projetos da Dullshift.
+Serviço independente de Web Push da DULLSHIFT. O primeiro consumidor é o SlothMint.
 
-> Estado atual: arquitetura definida; implementação ainda não iniciada.
+## O que faz
 
-## Propósito
+- `POST /api/subscriptions`: registra uma inscrição Web Push de um aplicativo autenticado;
+- `DELETE /api/subscriptions`: revoga a inscrição;
+- `POST /api/events`: valida, deduplica e envia o evento aos dispositivos inscritos;
+- `GET /api/health`: informa se o serviço responde.
 
-O SlothSignal receberá eventos de outros sistemas e entregará Web Push no celular ou computador. Ele não conhecerá regras de UserTesting, CalendarMate ou qualquer produto específico — apenas eventos padronizados.
+Cada aplicativo tem token de servidor próprio em `SLOTHSIGNAL_APP_TOKENS`. O token
+nunca deve ir ao navegador. Os clientes fazem a inscrição Web Push no próprio
+domínio e a encaminham por seu backend. A API não aceita CORS público. O
+service worker do SlothMint fica no repositório do SlothMint.
 
-```mermaid
-flowchart LR
-  APP["Aplicação"] -->|evento autenticado| API["SlothSignal API"]
-  API --> DB["Subscriptions e histórico"]
-  API --> PUSH["Web Push"]
-  PUSH --> DEVICE["Celular ou PC"]
-```
+## Configuração gratuita
 
-## Primeira integração
+1. Na mesma instância Supabase usada pelo SlothMint, execute
+   `supabase/migrations/001_signal.sql`. Isso mantém CalendarMate e SlothMint
+   dentro dos dois projetos Free ativos permitidos por conta; as tabelas do
+   SlothSignal têm prefixo `signal_` e RLS habilitada sem política pública.
+2. Gere um par de chaves VAPID em ambiente seguro (`npx web-push generate-vapid-keys --json`).
+   Guarde a chave privada só no ambiente do SlothSignal e configure a chave
+   pública também no SlothMint.
+3. Configure as variáveis de `.env.example` no host do SlothSignal; a service
+   role deve permanecer somente no servidor. Configure no SlothMint
+   `SLOTHSIGNAL_URL`, `SLOTHSIGNAL_APP_TOKEN` e
+   `NEXT_PUBLIC_SLOTHSIGNAL_VAPID_PUBLIC_KEY`. O token deve ter pelo menos 32
+   caracteres e corresponder à entrada `slothmint` no mapa do serviço.
+4. Implante os dois projetos por HTTPS e habilite notificações em Ajustes no
+   SlothMint. O navegador precisa conceder permissão a cada dispositivo.
 
-O primeiro consumidor será o **SlothMint**:
+Eventos iniciais: `opportunity.created`, `earning.approved` e `earning.paid`.
+Cada evento leva um caminho relativo do aplicativo, para impedir abertura de
+origens arbitrárias ao clicar na notificação. Ganhos e oportunidades são
+registrados mesmo quando o serviço de alerta está indisponível.
 
-```text
-SlothMint → POST /api/notifications → SlothSignal → Web Push
-```
+O banco é compartilhado por restrição do plano Free; os serviços têm deploy,
+API e código separados. Separe o banco quando houver necessidade operacional.
 
-Eventos iniciais planejados:
-
-- `opportunity.created`
-- `earning.approved`
-- `earning.paid`
-
-## Escopo planejado da V1
-
-- API REST/webhook autenticada por aplicação;
-- cadastro e revogação de dispositivos;
-- Web Push com VAPID e service worker;
-- preferências por aplicação e tipo de evento;
-- deduplicação com `dedupeKey`;
-- expiração/TTL para alertas urgentes;
-- histórico de envio, clique e falha;
-- redirecionamento seguro ao tocar na notificação;
-- Next.js/Vercel + Supabase Free.
-
-## Fora do escopo inicial
-
-- Gmail ou detectores de oportunidade;
-- regras de negócio dos sistemas consumidores;
-- WhatsApp, Telegram, Discord, SMS ou e-mail;
-- automação de tarefas nas plataformas.
-
-## Exemplo de contrato futuro
-
-```json
-{
-  "app": "slothmint",
-  "event": "opportunity.created",
-  "title": "Novo teste no UserTesting",
-  "body": "US$ 10 · aproximadamente 20 minutos",
-  "url": "https://example.com/task/123",
-  "priority": "high",
-  "expiresAt": "2026-09-18T15:30:00Z",
-  "dedupeKey": "usertesting:opportunity:123"
-}
-```
-
-## Princípio arquitetural
-
-O SlothSignal será um serviço independente, não a transformação de todos os projetos em microsserviços. Cada consumidor poderá continuar como monólito modular e usar este componente apenas para entrega de notificações.
+`npm run check` e `npm run build` verificam esta implementação. Não há tokens,
+VAPID privado ou chaves Supabase reais no repositório.
